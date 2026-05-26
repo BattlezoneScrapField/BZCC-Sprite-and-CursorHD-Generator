@@ -1,0 +1,22 @@
+{
+    "source_dir": "V:\\___VAC\\_BATTLEZONE\\TOOLS\\COLORIZE_TOOL",
+    "output_dir": "V:\\___VAC\\_BATTLEZONE\\TOOLS\\COLORIZE_TOOL",
+    "scales": {
+        "1.5": true,
+        "2.0": true,
+        "3.0": true,
+        "4.0": true,
+        "4.5": true,
+        "5.0": true
+    },
+    "srgb": false,
+    "dry_run": false,
+    "anti_alias": false,
+    "sharpen": 0.0,
+    "aa": true,
+    "pixel": false,
+    "scale": 4.0,
+    "contrast": 1.0,
+    "brightness": 1.0,
+    "saturation": 1.0
+}
