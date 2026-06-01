@@ -2,8 +2,8 @@
 """
 BZCC Sprite Generator
 =====================
-Unified tool for cursor sprite‑sheets and sprite/colour-map generation.
-Global export multiplier (×1 … ×5) scales all output textures.
+Unified tool for cursor sprite-sheets and sprite/colour-map generation.
+Global export multiplier scales the SOURCE dimensions dynamically.
 All settings (export paths, cursor names, etc.) are saved between sessions.
 """
 
@@ -46,7 +46,7 @@ MULTIPLIER_PRESETS = [1, 2, 3, 4, 5]
 DEFAULT_MULTIPLIER = 1
 
 # ----------------------------------------------------------------------
-# PIL → QPixmap (no channel swapping – accurate preview)
+# PIL -> QPixmap (accurate preview mapping)
 # ----------------------------------------------------------------------
 def pil2pixmap(pil_img: Image.Image) -> QPixmap:
     if pil_img.mode != "RGBA":
@@ -56,25 +56,24 @@ def pil2pixmap(pil_img: Image.Image) -> QPixmap:
     return QPixmap.fromImage(qim)
 
 # ----------------------------------------------------------------------
-# Cursor constants
+# Cursor constants (Grid info + dynamic scales based on original size)
 # ----------------------------------------------------------------------
 GRID_SIZE = 8
 CELL_SIZE = 128
 FRAMES_TOTAL = 64
 SOURCE_DIM = 1024
 
-EXPORT_SIZES_CURSOR = {
-    "base": 256, "x1_5": 384, "x2_0": 512, "x2_5": 640,
-    "x3_0": 768, "x3_5": 896, "x4_0": 1024, "x4_5": 1152, "x5_0": 1280,
+EXPORT_SCALES_CURSOR = {
+    "base": 1.0, "x1_5": 1.5, "x2_0": 2.0, "x2_5": 2.5,
+    "x3_0": 3.0, "x3_5": 3.5, "x4_0": 4.0, "x4_5": 4.5, "x5_0": 5.0,
 }
 
 # ----------------------------------------------------------------------
-# Sprite generator constants
+# Sprite generator constants (Dynamic scales based on original size)
 # ----------------------------------------------------------------------
-BASE_SIZE_SPRITE = 128
-VARIANTS_SPRITE: List[Tuple[str, int]] = [
-    ("x1_0", 128), ("x1_5", 192), ("x2_0", 256), ("x2_5", 320),
-    ("x3_0", 384), ("x3_5", 448), ("x4_0", 512), ("x4_5", 576), ("x5_0", 640),
+VARIANTS_SPRITE_SCALES: List[Tuple[str, float]] = [
+    ("x1_0", 1.0), ("x1_5", 1.5), ("x2_0", 2.0), ("x2_5", 2.5),
+    ("x3_0", 3.0), ("x3_5", 3.5), ("x4_0", 4.0), ("x4_5", 4.5), ("x5_0", 5.0),
 ]
 
 EXPORT_FORMATS = ["DDS", "TGA", "PNG"]
@@ -86,7 +85,7 @@ RESAMPLE_MAP = {
 }
 
 # ----------------------------------------------------------------------
-# texconv finder
+# Utility: Find texconv executable
 # ----------------------------------------------------------------------
 def find_texconv() -> Optional[Path]:
     env = shutil.which("texconv")
@@ -196,15 +195,15 @@ class CursorPanel(QGroupBox):
         main_layout = QVBoxLayout()
         main_layout.setSpacing(3)
 
-        # preview
+        # Preview area
         self.preview_label = QLabel()
         self.preview_label.setAlignment(Qt.AlignCenter)
         self.preview_label.setFixedSize(CELL_SIZE, CELL_SIZE)
         self.preview_label.setStyleSheet("background-color: #222; border: 1px solid #555;")
         main_layout.addWidget(self.preview_label, alignment=Qt.AlignCenter)
 
-        # annotations
-        info = QLabel("💡 1024×1024 sheet or 64 frames 128×128 (sequence)")
+        # Annotations
+        info = QLabel("💡 1024x1024 sheet or 64 frames 128x128 (sequence)")
         info.setWordWrap(True); info.setStyleSheet("color: #aaa; font-size: 8pt;")
         main_layout.addWidget(info)
 
@@ -213,7 +212,7 @@ class CursorPanel(QGroupBox):
         self.size_warning.setWordWrap(True)
         main_layout.addWidget(self.size_warning)
 
-        # background
+        # Background mode selection
         bg_row = QHBoxLayout()
         bg_row.addWidget(QLabel("BG:"))
         self.bg_combo = QComboBox()
@@ -226,7 +225,7 @@ class CursorPanel(QGroupBox):
         bg_row.addStretch()
         main_layout.addLayout(bg_row)
 
-        # navigation (added first/last)
+        # Navigation
         nav_layout = QHBoxLayout()
         self.btn_first = QPushButton("⏮"); self.btn_first.setFixedWidth(28)
         self.btn_first.clicked.connect(self._first_frame); nav_layout.addWidget(self.btn_first)
@@ -248,7 +247,7 @@ class CursorPanel(QGroupBox):
         nav_layout.addWidget(self.frame_label)
         main_layout.addLayout(nav_layout)
 
-        # load/clear
+        # Load / Clear actions
         load_row = QHBoxLayout()
         self.btn_load_sheet = QPushButton("Load sheet"); self.btn_load_sheet.clicked.connect(self.load_sheet_dialog)
         self.btn_load_seq = QPushButton("Load sequence"); self.btn_load_seq.clicked.connect(self.load_sequence_dialog)
@@ -257,7 +256,7 @@ class CursorPanel(QGroupBox):
         load_row.addWidget(self.btn_clear)
         main_layout.addLayout(load_row)
 
-        # settings (compact)
+        # Configuration settings
         set_row = QHBoxLayout()
         set_row.addWidget(QLabel("Name:"))
         self.base_name_input = QLineEdit("cursorHD"); self.base_name_input.setFixedWidth(70)
@@ -276,7 +275,7 @@ class CursorPanel(QGroupBox):
         set_row.addStretch()
         main_layout.addLayout(set_row)
 
-        # processing sliders
+        # Processing bindings
         for slider in [self.processing.sharpen_slider, self.processing.blur_slider,
                        self.processing.gamma_slider, self.processing.brightness_slider,
                        self.processing.contrast_slider, self.processing.opacity_slider,
@@ -287,7 +286,7 @@ class CursorPanel(QGroupBox):
         self.setLayout(main_layout)
 
     # ----------------------------------------------------------------
-    # Background
+    # Background and Previews
     # ----------------------------------------------------------------
     def _on_bg_changed(self, idx):
         self._bg_mode = "checker" if idx == 0 else "solid"
@@ -335,7 +334,7 @@ class CursorPanel(QGroupBox):
         self.preview_label.setPixmap(self._make_preview_pixmap(pix))
 
     # ----------------------------------------------------------------
-    # Frame navigation
+    # Frame Navigation Handling
     # ----------------------------------------------------------------
     def _toggle_anim(self):
         if self._anim_running:
@@ -388,7 +387,7 @@ class CursorPanel(QGroupBox):
         self._update_preview_with_bg()
 
     # ----------------------------------------------------------------
-    # Load / Clear
+    # File Operations
     # ----------------------------------------------------------------
     def clear_image(self):
         self.source_image = None; self.frames.clear()
@@ -453,7 +452,7 @@ class CursorPanel(QGroupBox):
         QTimer.singleShot(500, self._schedule_process)
 
     # ----------------------------------------------------------------
-    # Processing
+    # Core Processing
     # ----------------------------------------------------------------
     def _schedule_process(self):
         self._process_timer.start(200)
@@ -467,7 +466,7 @@ class CursorPanel(QGroupBox):
                 img = Image.open(self.image_path).convert("RGBA")
             img = self.apply_processing(img)
             if img.size != (SOURCE_DIM, SOURCE_DIM):
-                self.size_warning.setText(f"⚠ Size: {img.size[0]}×{img.size[1]} (not 1024×1024)")
+                self.size_warning.setText(f"Warning: Size {img.width}x{img.height} (not 1024x1024)")
             else:
                 self.size_warning.setText("")
             self.source_image = img
@@ -475,7 +474,7 @@ class CursorPanel(QGroupBox):
             self._update_preview_with_bg()
             self.frame_slider.setValue(0); self.frame_label.setText("0 / 63")
         except Exception as e:
-            self.size_warning.setText(f"❌ Error: {e}")
+            self.size_warning.setText(f"Error: {e}")
 
     def apply_processing(self, img: Image.Image) -> Image.Image:
         vals = self.processing.get_values()
@@ -521,7 +520,7 @@ class CursorPanel(QGroupBox):
         self.current_frame = 0
 
     # ----------------------------------------------------------------
-    # Persistence (cursor‑specific)
+    # Settings Serialization
     # ----------------------------------------------------------------
     def save_settings(self):
         s = QSettings("BZCC_Modding", "CursorTool")
@@ -570,8 +569,9 @@ class CursorPanel(QGroupBox):
             vals[key] = float(s.value(f"{self.settings_prefix}_{key}", default))
         self.processing.set_values(vals)
 
+
 # ======================================================================
-# Cursor Baker tab (two panels + export + persistence)
+# Cursor Baker tab (Multiplying dynamic dimensions based on source)
 # ======================================================================
 class CursorBakerTab(QWidget):
     def __init__(self, parent=None):
@@ -583,7 +583,6 @@ class CursorBakerTab(QWidget):
         panels.addWidget(self.panel_default); panels.addWidget(self.panel_highlight)
         layout.addLayout(panels)
 
-        # Export area
         export_group = QGroupBox("Export")
         exp_layout = QVBoxLayout()
         target_line = QHBoxLayout()
@@ -599,7 +598,6 @@ class CursorBakerTab(QWidget):
         export_group.setLayout(exp_layout)
         layout.addWidget(export_group)
 
-        # auto‑save export path on change (debounced)
         self._save_timer = QTimer(self); self._save_timer.setSingleShot(True)
         self._save_timer.timeout.connect(self.save_settings)
         self.target_dir.textChanged.connect(lambda: self._save_timer.start(500))
@@ -629,12 +627,15 @@ class CursorBakerTab(QWidget):
         if not base: return False
         use_aa = panel.aa_check.isChecked()
         resample = Image.LANCZOS if use_aa else Image.NEAREST
-        for suffix, orig_size in EXPORT_SIZES_CURSOR.items():
-            size = round(orig_size * mult)
+        
+        for suffix, scale in EXPORT_SCALES_CURSOR.items():
+            target_w = round(panel.source_image.width * scale * mult)
+            target_h = round(panel.source_image.height * scale * mult)
+            
             filename = f"{base}.tga" if suffix == "base" else f"{base}_{suffix}.tga"
             out_path = os.path.join(out_dir, filename)
             try:
-                resized = panel.source_image.resize((size, size), resample=resample)
+                resized = panel.source_image.resize((target_w, target_h), resample=resample)
                 resized.save(out_path, format="TGA")
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Failed to save {filename}:\n{e}")
@@ -686,7 +687,6 @@ ConfigureCursors()
         except Exception as e:
             QMessageBox.warning(self, "Warning", f"Config not written:\n{e}")
 
-    # ---------- export path persistence ----------
     def save_settings(self):
         s = QSettings("BZCC_Modding", "CursorTool")
         s.setValue("export_dir", self.target_dir.text())
@@ -695,8 +695,9 @@ ConfigureCursors()
         s = QSettings("BZCC_Modding", "CursorTool")
         self.target_dir.setText(s.value("export_dir", ""))
 
+
 # ======================================================================
-# Sprite Generator tab (single preview)
+# Sprite Generator tab (Multiplying dynamic dimensions based on source)
 # ======================================================================
 class SpriteGeneratorTab(QWidget):
     def __init__(self, parent=None):
@@ -714,7 +715,7 @@ class SpriteGeneratorTab(QWidget):
     def _init_ui(self):
         main = QVBoxLayout(); main.setSpacing(4)
 
-        # top bar
+        # Top path inputs
         top = QHBoxLayout()
         self.source_path_edit = QLineEdit(); self.source_path_edit.setPlaceholderText("Source image...")
         self.btn_browse_source = QPushButton("Browse"); self.btn_browse_source.clicked.connect(self._browse_source)
@@ -724,10 +725,11 @@ class SpriteGeneratorTab(QWidget):
         top.addWidget(QLabel("Target:")); top.addWidget(self.target_dir_edit, 1); top.addWidget(self.btn_browse_target)
         main.addLayout(top)
 
-        # body
+        # Body containers
         body = QHBoxLayout()
-        # left controls
         left = QVBoxLayout()
+        
+        # Left controls
         controls = QGroupBox("Settings")
         form = QFormLayout()
         self.export_format_cb = QComboBox(); self.export_format_cb.addItems(EXPORT_FORMATS)
@@ -737,35 +739,46 @@ class SpriteGeneratorTab(QWidget):
         self.base_name_edit = QLineEdit("colorize"); form.addRow("Base name:", self.base_name_edit)
         self.auto_reload_cb = QCheckBox("Auto-reload"); self.auto_reload_cb.setChecked(True); form.addRow(self.auto_reload_cb)
         self.overwrite_cb = QCheckBox("Overwrite"); self.overwrite_cb.setChecked(True); form.addRow(self.overwrite_cb)
-        self.force_gray_cb = QCheckBox("Force grayscale"); self.force_gray_cb.setChecked(True); self.force_gray_cb.stateChanged.connect(self._schedule_preview); form.addRow(self.force_gray_cb)
-        self.keep_alpha_cb = QCheckBox("Keep alpha"); self.keep_alpha_cb.setChecked(True); self.keep_alpha_cb.stateChanged.connect(self._schedule_preview); form.addRow(self.keep_alpha_cb)
+        
+        self.force_gray_cb = QCheckBox("Force grayscale"); self.force_gray_cb.setChecked(True)
+        self.force_gray_cb.stateChanged.connect(self._schedule_preview); form.addRow(self.force_gray_cb)
+        
+        self.keep_alpha_cb = QCheckBox("Keep alpha"); self.keep_alpha_cb.setChecked(True)
+        self.keep_alpha_cb.stateChanged.connect(self._schedule_preview); form.addRow(self.keep_alpha_cb)
+        
         self.invert_cb = QCheckBox("Invert"); self.invert_cb.stateChanged.connect(self._schedule_preview); form.addRow(self.invert_cb)
         self.normalize_cb = QCheckBox("Normalize"); self.normalize_cb.stateChanged.connect(self._schedule_preview); form.addRow(self.normalize_cb)
-        self.antialias_cb = QCheckBox("Antialias"); self.antialias_cb.setChecked(True); self.antialias_cb.stateChanged.connect(self._schedule_preview); form.addRow(self.antialias_cb)
-        self.resample_cb = QComboBox(); self.resample_cb.addItems(RESAMPLE_NAMES); self.resample_cb.setCurrentText("Lanczos"); self.resample_cb.currentTextChanged.connect(self._schedule_preview)
+        self.antialias_cb = QCheckBox("Antialias"); self.antialias_cb.setChecked(True)
+        self.antialias_cb.stateChanged.connect(self._schedule_preview); form.addRow(self.antialias_cb)
+        
+        self.resample_cb = QComboBox(); self.resample_cb.addItems(RESAMPLE_NAMES); self.resample_cb.setCurrentText("Lanczos")
+        self.resample_cb.currentTextChanged.connect(self._schedule_preview)
         form.addRow("Resample:", self.resample_cb)
         controls.setLayout(form)
 
-        # processing sliders
+        # Processing bindings
         for slider in [self.processing.sharpen_slider, self.processing.blur_slider,
                        self.processing.gamma_slider, self.processing.brightness_slider,
                        self.processing.contrast_slider, self.processing.opacity_slider,
                        self.processing.edge_slider, self.processing.denoise_slider]:
             slider.valueChanged.connect(self._schedule_preview)
 
-        # variants
-        variants_group = QGroupBox("Export sizes")
+        # Scaled Variants Checkboxes
+        variants_group = QGroupBox("Export scales")
         var_layout = QVBoxLayout()
         self.variant_checks: Dict[str, QCheckBox] = {}
         row_w = QWidget(); row_l = QHBoxLayout()
-        for i, (key, size) in enumerate(VARIANTS_SPRITE):
-            cb = QCheckBox(f"{key} ({size}×{size})"); cb.setChecked(True)
+        for i, (key, scale) in enumerate(VARIANTS_SPRITE_SCALES):
+            cb = QCheckBox(f"{key} ({scale}x)"); cb.setChecked(True)
             self.variant_checks[key] = cb
             row_l.addWidget(cb)
             if (i+1)%2 == 0:
+                row_w.setLayout(row_l)
                 var_layout.addWidget(row_w)
                 row_w = QWidget(); row_l = QHBoxLayout()
-        if len(VARIANTS_SPRITE)%2 != 0: var_layout.addWidget(row_w)
+        if len(VARIANTS_SPRITE_SCALES)%2 != 0: 
+            row_w.setLayout(row_l)
+            var_layout.addWidget(row_w)
         variants_group.setLayout(var_layout)
 
         left_scroll = QScrollArea(); left_scroll.setWidgetResizable(True)
@@ -776,10 +789,11 @@ class SpriteGeneratorTab(QWidget):
         left_scroll.setWidget(left_container)
         left.addWidget(left_scroll)
 
-        # right: one preview + log
+        # Right UI panels
         right = QVBoxLayout()
         self.result_preview = QLabel()
         self.result_preview.setFixedSize(400, 400)
+        self.result_preview.setAlignment(Qt.AlignCenter)
         self.result_preview.setStyleSheet("background-color: #222; border: 1px solid #555;")
         right.addWidget(self.result_preview, alignment=Qt.AlignCenter)
 
@@ -853,7 +867,7 @@ class SpriteGeneratorTab(QWidget):
         try:
             self.source_image = self._load_image(Path(path))
             self.source_mtime = os.path.getmtime(path)
-            self._log(f"Loaded: {os.path.basename(path)}")
+            self._log(f"Loaded: {os.path.basename(path)} ({self.source_image.width}x{self.source_image.height})")
             self.refresh_preview()
             if self.watcher.files(): self.watcher.removePaths(self.watcher.files())
             self.watcher.addPath(path)
@@ -875,9 +889,10 @@ class SpriteGeneratorTab(QWidget):
                     return Image.open(pngs[0]).convert("RGBA")
         return Image.open(p).convert("RGBA")
 
-    def process_image(self, img: Image.Image, size: Optional[int] = None) -> Image.Image:
+    def process_image(self, img: Image.Image, target_w: Optional[int] = None, target_h: Optional[int] = None) -> Image.Image:
         s = self._current_settings()
         base = img.convert("RGBA")
+        
         if s.force_grayscale:
             if s.keep_alpha:
                 r, g, b, a = base.split()
@@ -886,19 +901,22 @@ class SpriteGeneratorTab(QWidget):
             else:
                 gray = ImageOps.grayscale(base).convert("L")
                 base = Image.merge("RGBA", (gray, gray, gray, Image.new("L", gray.size, 255)))
+                
         if s.invert:
+            r, g, b, a = base.split(); gray = ImageOps.invert(r)
             if s.keep_alpha:
-                r, g, b, a = base.split(); gray = ImageOps.invert(r)
                 base = Image.merge("RGBA", (gray, gray, gray, a))
             else:
-                r, g, b, a = base.split(); gray = ImageOps.invert(r)
-                base = Image.merge("RGBA", (gray, gray, gray, a))
+                base = Image.merge("RGBA", (gray, gray, gray, Image.new("L", gray.size, 255)))
+                
         if s.normalize_levels: base = self._normalize_levels(base, s.keep_alpha)
+        
         vals = self.processing.get_values()
         if vals["gamma"] != 1.0: base = self._apply_gamma(base, vals["gamma"])
         if vals["brightness"] != 1.0: base = ImageEnhance.Brightness(base).enhance(vals["brightness"])
         if vals["contrast"] != 1.0: base = ImageEnhance.Contrast(base).enhance(vals["contrast"])
         if vals["opacity"] < 1.0: base = self._apply_opacity(base, vals["opacity"])
+        
         if vals["blur"] > 0: base = base.filter(ImageFilter.GaussianBlur(radius=float(vals["blur"])))
         if vals["edge_enhance"] > 0:
             enhanced = base.filter(ImageFilter.EDGE_ENHANCE_MORE)
@@ -908,9 +926,11 @@ class SpriteGeneratorTab(QWidget):
             amount = float(vals["sharpen"])
             sharpened = base.filter(ImageFilter.UnsharpMask(radius=1.2, percent=int(70+amount*120), threshold=2))
             base = Image.blend(base, sharpened, min(1.0, amount/3.0))
-        if size is not None and base.size != (size, size):
+            
+        if target_w is not None and target_h is not None and (base.width != target_w or base.height != target_h):
             resample = RESAMPLE_MAP.get(s.resample, RESAMPLE.LANCZOS) if s.antialias else RESAMPLE.NEAREST
-            base = self._resize_square(base, size, resample)
+            base = base.resize((target_w, target_h), resample=resample)
+            
         return base
 
     def _current_settings(self):
@@ -923,14 +943,6 @@ class SpriteGeneratorTab(QWidget):
         s.antialias = self.antialias_cb.isChecked()
         s.resample = self.resample_cb.currentText()
         return s
-
-    @staticmethod
-    def _resize_square(img, size, resample):
-        if img.width != img.height:
-            side = min(img.width, img.height)
-            left = (img.width - side)//2; top = (img.height - side)//2
-            img = img.crop((left, top, left+side, top+side))
-        return img.resize((size, size), resample=resample)
 
     @staticmethod
     def _normalize_levels(img, keep_alpha):
@@ -960,26 +972,27 @@ class SpriteGeneratorTab(QWidget):
         if self.source_image is None:
             self.result_preview.clear(); return
         try:
-            result = self.process_image(self.source_image.copy(), size=BASE_SIZE_SPRITE)
+            # We don't force size to 128 here, just apply processing to native copy for preview
+            result = self.process_image(self.source_image.copy())
             thumb = self._thumbnail_with_checker(result, 400)
             self.result_preview.setPixmap(pil2pixmap(thumb))
         except Exception as e: self._log(f"Preview error: {e}")
 
     def _thumbnail_with_checker(self, img: Image.Image, max_size: int) -> Image.Image:
         thumb = img.copy()
-        if thumb.width != thumb.height:
-            side = min(thumb.width, thumb.height)
-            left = (thumb.width - side)//2; top = (thumb.height - side)//2
-            thumb = thumb.crop((left, top, left+side, top+side))
         thumb.thumbnail((max_size, max_size), RESAMPLE.LANCZOS)
-        bg = Image.new("RGBA", thumb.size, (48,48,48,255))
-        checker = Image.new("RGBA", thumb.size, (0,0,0,0))
+        
+        # Proper checkered background ensuring native aspect ratio preview
+        bg = Image.new("RGBA", thumb.size, (48, 48, 48, 255))
         tile = 12
         for y in range(0, thumb.height, tile):
             for x in range(0, thumb.width, tile):
-                if ((x//tile)+(y//tile))%2 == 0:
-                    Image.Image.paste(checker, Image.new("RGBA", (min(tile, thumb.width-x), min(tile, thumb.height-y)), (72,72,72,255)), (x, y))
-        bg = Image.alpha_composite(checker, thumb)
+                if ((x // tile) + (y // tile)) % 2 == 0:
+                    box = (x, y, min(x + tile, thumb.width), min(y + tile, thumb.height))
+                    bg.paste((72, 72, 72, 255), box)
+        
+        # Paste the transparent thumbnail on the checkerboard
+        bg.paste(thumb, (0, 0), thumb)
         return bg
 
     def export_all(self):
@@ -991,20 +1004,29 @@ class SpriteGeneratorTab(QWidget):
         export_format = self.export_format_cb.currentText().upper()
         overwrite = self.overwrite_cb.isChecked()
         mult = self.window().get_export_multiplier()
+        
         try:
             written = []
-            base_size = round(BASE_SIZE_SPRITE * mult)
-            processed = self.process_image(self.source_image.copy(), size=base_size)
+            
+            # Export base scale dynamically using source dimensions
+            base_w = round(self.source_image.width * mult)
+            base_h = round(self.source_image.height * mult)
+            processed = self.process_image(self.source_image.copy(), target_w=base_w, target_h=base_h)
             self._write_one(processed, out_dir, base_name, export_format, overwrite)
-            written.append(f"{base_name}.{export_format.lower()}")
-            for key, orig_size in VARIANTS_SPRITE:
+            written.append(f"{base_name}.{export_format.lower()} ({base_w}x{base_h})")
+            
+            # Export selected variants dynamically
+            for key, scale in VARIANTS_SPRITE_SCALES:
                 if not self.variant_checks[key].isChecked(): continue
-                out_size = round(orig_size * mult)
-                img = self.process_image(self.source_image.copy(), size=out_size)
+                out_w = round(self.source_image.width * scale * mult)
+                out_h = round(self.source_image.height * scale * mult)
+                
+                img = self.process_image(self.source_image.copy(), target_w=out_w, target_h=out_h)
                 name = f"{base_name}_{key}"
                 self._write_one(img, out_dir, name, export_format, overwrite)
-                written.append(f"{name}.{export_format.lower()}")
-            self._log("Export done:")
+                written.append(f"{name}.{export_format.lower()} ({out_w}x{out_h})")
+                
+            self._log("Export completed:")
             for w in written: self._log(f"  {w}")
         except Exception as e:
             QMessageBox.critical(self, "Export failed", str(e))
@@ -1045,7 +1067,9 @@ class SpriteGeneratorTab(QWidget):
         timestamp = time.strftime("%H:%M:%S")
         self.log_text.append(f"[{timestamp}] {msg}")
 
-    # ---------- persistence ----------
+    # ----------------------------------------------------------------
+    # Settings Serialization
+    # ----------------------------------------------------------------
     def save_settings(self):
         s = QSettings("BZCC_Modding", "SpriteGen")
         s.setValue("source_path", self.source_path_edit.text())
@@ -1096,7 +1120,7 @@ class SpriteGeneratorTab(QWidget):
         if self.source_path_edit.text(): self.reload_source()
 
 # ======================================================================
-# Main window
+# Main window entry
 # ======================================================================
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -1109,13 +1133,13 @@ class MainWindow(QMainWindow):
         central = QWidget(); self.setCentralWidget(central)
         layout = QVBoxLayout(); layout.setSpacing(4)
 
-        # Multiplier buttons
+        # Multiplier UI
         mult_group = QGroupBox("Export Size Multiplier")
         mult_layout = QHBoxLayout()
         mult_layout.addWidget(QLabel("Scale all outputs by:"))
         self.mult_buttons = QButtonGroup(self)
         for val in MULTIPLIER_PRESETS:
-            btn = QPushButton(f"×{val}"); btn.setCheckable(True); btn.setFixedWidth(40)
+            btn = QPushButton(f"x{val}"); btn.setCheckable(True); btn.setFixedWidth(40)
             if val == DEFAULT_MULTIPLIER: btn.setChecked(True)
             self.mult_buttons.addButton(btn, val)
             mult_layout.addWidget(btn)
@@ -1167,10 +1191,9 @@ class MainWindow(QMainWindow):
         return self.export_multiplier
 
     def closeEvent(self, event):
-        # Save all sub‑tab settings
         self.cursor_tab.panel_default.save_settings()
         self.cursor_tab.panel_highlight.save_settings()
-        self.cursor_tab.save_settings()          # export path
+        self.cursor_tab.save_settings()
         self.sprite_tab.save_settings()
         event.accept()
 
