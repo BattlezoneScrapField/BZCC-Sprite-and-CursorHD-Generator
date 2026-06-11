@@ -1,6 +1,8 @@
 # ** THIS CONTENT IS AI GENERATED **
 
-<img width="1434" height="873" alt="2026-05-26_103453" src="https://github.com/user-attachments/assets/68572fc3-0d1f-465b-9029-f853d0307106" />
+<img width="1434" height="927" alt="clipboard_20260611_193031_4d693b15" src="https://github.com/user-attachments/assets/151ce814-993e-4c88-bfc2-73bb0f4ad9cc" />
+<img width="1434" height="927" alt="clipboard_20260611_193041_570e3f50" src="https://github.com/user-attachments/assets/65b1acdf-6ddb-4b52-a767-62f70ed0cd6e" />
+
 ## BZCC Sprite Generator
 
 [Exe file you find here in "dist" folder.](https://drive.google.com/drive/folders/1TdC_JE8A9ezst-rZ1kxEcvU3EbNn16qA?usp=drive_link)
