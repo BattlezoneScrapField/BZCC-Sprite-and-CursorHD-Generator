@@ -3,7 +3,7 @@
 BZCC Sprite Generator
 =====================
 Unified tool for cursor sprite-sheets and sprite/colour-map generation.
-Global export multiplier scales the SOURCE dimensions dynamically.
+Export dimensions use fixed presets for predictable output.
 All settings (export paths, cursor names, etc.) are saved between sessions.
 """
 
@@ -1567,7 +1567,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("BZCC Asset Studio")
         self.resize(1000, 700)
         self.setMinimumSize(800, 600)
-        self.export_multiplier = DEFAULT_MULTIPLIER
+        self.export_multiplier = 1
 
         self._setup_typography_and_theme()
         central = QWidget()
@@ -1575,29 +1575,6 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout()
         layout.setSpacing(10)
         layout.setContentsMargins(10, 10, 10, 10)
-
-        mult_group = QGroupBox("Export Dimensions")
-        mult_layout = QHBoxLayout()
-        mult_layout.setContentsMargins(8, 14, 8, 8)
-        mult_layout.setSpacing(8)
-        
-        self.mult_buttons = QButtonGroup(self)
-        for val in MULTIPLIER_PRESETS:
-            btn = QPushButton(f"x{val}")
-            btn.setCheckable(True)
-            btn.setFixedWidth(60)
-            btn.setCursor(Qt.PointingHandCursor)
-            if val == DEFAULT_MULTIPLIER:
-                btn.setChecked(True)
-            self.mult_buttons.addButton(btn, val)
-            mult_layout.addWidget(btn)
-        mult_layout.addStretch()
-
-        self.mult_buttons.idClicked.connect(self._set_multiplier)
-
-        mult_group.setLayout(mult_layout)
-        mult_group.setVisible(False)
-        layout.addWidget(mult_group)
 
         self.tabs = QTabWidget()
         self.tabs.setCursor(Qt.ArrowCursor)
@@ -1614,14 +1591,6 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.tabs)
 
         central.setLayout(layout)
-
-        s = QSettings("BZCC_Modding", "UnifiedTool")
-        saved_mult = int(s.value("global_multiplier", DEFAULT_MULTIPLIER))
-        if saved_mult in MULTIPLIER_PRESETS:
-            self._set_multiplier(saved_mult)
-            btn = self.mult_buttons.button(saved_mult)
-            if btn:
-                btn.setChecked(True)
 
     def _setup_typography_and_theme(self):
         self.setStyleSheet("""
@@ -1664,7 +1633,10 @@ class MainWindow(QMainWindow):
             }
             QPushButton:hover {
                 background-color: #3f3f46;
-                border-color: #52525b;
+                border-color: #73737d;
+            }
+            QPushButton:focus {
+                border-color: #93c5fd;
             }
             QPushButton:pressed {
                 background-color: #52525b;
@@ -1677,7 +1649,7 @@ class MainWindow(QMainWindow):
             QPushButton#primaryAction {
                 background-color: #2563eb;
                 color: white;
-                border: none;
+                border: 2px solid #1d4ed8;
                 font-weight: 600;
                 padding: 7px 12px;
                 border-radius: 6px;
@@ -1685,13 +1657,19 @@ class MainWindow(QMainWindow):
             }
             QPushButton#primaryAction:hover {
                 background-color: #3b82f6;
+                border-color: #60a5fa;
             }
             QPushButton#primaryAction:pressed {
                 background-color: #1d4ed8;
+                border-color: #2563eb;
+            }
+            QPushButton#primaryAction:focus {
+                border-color: #bfdbfe;
             }
             QPushButton#primaryAction:disabled {
                 background-color: #1e3a8a;
                 color: #93c5fd;
+                border-color: #1e3a8a;
             }
             QLineEdit, QSpinBox, QTextEdit, QComboBox {
                 background-color: #09090b;
@@ -1775,13 +1753,11 @@ class MainWindow(QMainWindow):
         """)
 
     def _set_multiplier(self, val):
-        if val not in MULTIPLIER_PRESETS:
-            val = DEFAULT_MULTIPLIER
-        self.export_multiplier = int(val)
-        QSettings("BZCC_Modding", "UnifiedTool").setValue("global_multiplier", self.export_multiplier)
+        # Kept for compatibility with older saved settings and external callers.
+        self.export_multiplier = 1
 
     def get_export_multiplier(self) -> int:
-        return self.export_multiplier
+        return 1
 
     def closeEvent(self, event):
         self.cursor_tab.panel_default.save_settings()
