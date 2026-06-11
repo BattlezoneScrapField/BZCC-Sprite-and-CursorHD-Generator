@@ -1,7 +1,8 @@
 # ** THIS CONTENT IS AI GENERATED **
 
 <img width="1434" height="927" alt="clipboard_20260611_193031_4d693b15" src="https://github.com/user-attachments/assets/151ce814-993e-4c88-bfc2-73bb0f4ad9cc" />
-<img width="1434" height="927" alt="clipboard_20260611_193041_570e3f50" src="https://github.com/user-attachments/assets/65b1acdf-6ddb-4b52-a767-62f70ed0cd6e" />
+<img width="1434" height="857" alt="clipboard_20260611_193412_b5fdd1d7" src="https://github.com/user-attachments/assets/e477e12d-a3b5-4110-9961-8033cae93339" />
+
 
 ## BZCC Sprite Generator
 
